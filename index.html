@@ -1,118 +1,365 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Запись на мероприятие</title>
-    <style>
-        body { font-family: Arial; margin: 20px; }
-        table { border-collapse: collapse; width: 100%; font-size: 14px; }
-        th, td { border: 1px solid #999; padding: 8px; text-align: left; vertical-align: top; }
-        th { background: #1a73e8; color: white; }
-        input, button { padding: 6px; margin: 4px; }
-        .form-block { background: #f0f4f8; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .form-block input { width: 200px; }
-        .form-block label { display: inline-block; width: 70px; font-weight: bold; }
-        .del-btn { color: red; cursor: pointer; font-weight: bold; }
-        .count { margin-top: 10px; font-weight: bold; }
-    </style>
+<meta charset="UTF-8">
+<title>Запись на мероприятие</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f5f5f5;
+  }
+  h1 {
+    margin: 0 0 15px 0;
+  }
+  .mode-switch {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-bottom: 15px;
+  }
+  .mode-switch button {
+    padding: 8px 16px;
+    border: 1px solid #888;
+    background: #fff;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+  .mode-switch button.active {
+    background: #4a90e2;
+    color: #fff;
+    border-color: #4a90e2;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+  }
+  th, td {
+    border: 1px solid #999;
+    padding: 6px 8px;
+    font-size: 14px;
+    vertical-align: top;
+    min-width: 80px;
+  }
+  th {
+    background: #e8e8e8;
+    text-align: center;
+  }
+  td[contenteditable="true"]:focus {
+    outline: 2px solid #4a90e2;
+    background: #f0f7ff;
+  }
+  td.locked {
+    background: #f0f0f0;
+    color: #888;
+  }
+  th.selected, td.selected {
+    background: #cce5ff !important;
+  }
+  td.row-end-marker { display: none; }
+  .actions {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+  }
+  .actions button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #fff;
+    background: #4a90e2;
+  }
+  .actions button:hover { background: #357ab8; }
+  .actions.hidden { display: none; }
+  .hint {
+    font-size: 12px;
+    color: #666;
+    margin-top: 8px;
+  }
+</style>
 </head>
 <body>
-    <h2>📋 Запись на мероприятие</h2>
-    
-    <div class="form-block">
-        <label>Дата:</label><input id="date"><br>
-        <label>Название:</label><input id="name"><br>
-        <label>СПО:</label><input id="spo"><br>
-        <label>ВУЗ:</label><input id="vuz"><br>
-        <button onclick="addRow()">➕ Добавить</button>
-        <button onclick="saveData()">💾 Сохранить</button>
-        <button onclick="exportCSV()">📤 Выгрузить CSV</button>
-        <button onclick="clearAll()">🗑 Очистить всё</button>
-    </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th style="width:15%">Дата</th>
-                <th style="width:20%">Название</th>
-                <th style="width:30%">Студент СПО (ФИО, курс, специальность)</th>
-                <th style="width:30%">Студент ВУЗа (ФИО, курс, направление)</th>
-                <th style="width:5%"></th>
-            </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-    </table>
+<h1>Запись на мероприятие</h1>
 
-    <div class="count" id="rowCount">Всего строк: 0</div>
+<div class="mode-switch">
+  <button id="btnOrg" class="active">организатор</button>
+  <button id="btnVol">волонтер</button>
+</div>
 
-    <script>
-        let rows = JSON.parse(localStorage.getItem('studentData')) || [];
+<table id="mainTable">
+  <thead>
+    <tr>
+      <th data-col="0">дата (день недели)</th>
+      <th data-col="1">время</th>
+      <th data-col="2">мероприятие</th>
+      <th data-col="3">№</th>
+      <th data-col="4">участники (ФИО, курс специальность(полностью)</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
 
-        function render() {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '';
-            rows.forEach((row, i) => {
-                tbody.innerHTML += `<tr>
-                    <td>${row.date || ''}</td>
-                    <td>${row.name || ''}</td>
-                    <td>${row.spo || ''}</td>
-                    <td>${row.vuz || ''}</td>
-                    <td><span class="del-btn" onclick="deleteRow(${i})">✕</span></td>
-                </tr>`;
-            });
-            document.getElementById('rowCount').textContent = `Всего строк: ${rows.length}`;
+<div class="actions" id="actions">
+  <button id="btnCsv">выгрузить CSV</button>
+  <button id="btnSave">сохранить</button>
+</div>
+
+<p class="hint">Наведите курсор на конец строки и нажмите Enter — после неё добавится новая строка. Для выделения строк/столбцов используйте клик по заголовкам или зажатый Shift.</p>
+
+<script>
+(function() {
+  const tbody = document.getElementById('tbody');
+  const table = document.getElementById('mainTable');
+  const actions = document.getElementById('actions');
+  const btnOrg = document.getElementById('btnOrg');
+  const btnVol = document.getElementById('btnVol');
+
+  let mode = 'organizer'; // 'organizer' | 'volunteer'
+
+  // ---- Восстановление данных ----
+  const STORAGE_KEY = 'eventTableData';
+  let savedData = null;
+  try {
+    savedData = JSON.parse(localStorage.getItem(STORAGE_KEY));
+  } catch(e) { savedData = null; }
+
+  // ---- Создание строки ----
+  function createRow(data) {
+    const tr = document.createElement('tr');
+    for (let c = 0; c < 5; c++) {
+      const td = document.createElement('td');
+      td.dataset.col = c;
+      td.dataset.row = '';
+      if (data && data[c] !== undefined) td.textContent = data[c];
+      tr.appendChild(td);
+    }
+    // маркер конца строки для отслеживания Enter
+    tbody.appendChild(tr);
+    updateEditability();
+    return tr;
+  }
+
+  // ---- Обновление доступности ячеек ----
+  function updateEditability() {
+    const rows = tbody.querySelectorAll('tr');
+    rows.forEach(tr => {
+      const cells = tr.querySelectorAll('td');
+      cells.forEach(td => {
+        const col = parseInt(td.dataset.col, 10);
+        if (mode === 'volunteer') {
+          // волонтёр редактирует только столбец 4
+          if (col === 4) {
+            td.setAttribute('contenteditable', 'true');
+            td.classList.remove('locked');
+          } else {
+            td.removeAttribute('contenteditable');
+
+            td.classList.add('locked');
+          }
+        } else {
+          // организатор редактирует всё
+          td.setAttribute('contenteditable', 'true');
+          td.classList.remove('locked');
         }
+      });
+    });
+    // кнопки внизу — только организатору
+    if (mode === 'organizer') {
+      actions.classList.remove('hidden');
+    } else {
+      actions.classList.add('hidden');
+    }
+  }
 
-        function addRow() {
-            const date = document.getElementById('date').value.trim() || '---';
-            const name = document.getElementById('name').value.trim() || 'Без названия';
-            const spo = document.getElementById('spo').value.trim() || 'ФИО, курс, специальность';
-            const vuz = document.getElementById('vuz').value.trim() || 'ФИО, курс, направление';
-            rows.push({ date, name, spo, vuz });
-            document.getElementById('date').value = '';
-            document.getElementById('name').value = '';
-            document.getElementById('spo').value = '';
-            document.getElementById('vuz').value = '';
-            render();
-            saveData();
-        }
+  // ---- Начальная инициализация таблицы ----
+  function initTable() {
+    tbody.innerHTML = '';
+    if (savedData && Array.isArray(savedData) && savedData.length) {
+      savedData.forEach(rowData => createRow(rowData));
+    } else {
+      // изначально таблица полностью пуста, но одна строка для работы
+      createRow();
+    }
+  }
 
-        function deleteRow(index) {
-            if (confirm('Удалить строку?')) {
-                rows.splice(index, 1);
-                render();
-                saveData();
-            }
-        }
+  // ---- Обработка Enter для добавления строки ----
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const active = document.activeElement;
+    if (!active || active.tagName !== 'TD') return;
 
-        function saveData() {
-            localStorage.setItem('studentData', JSON.stringify(rows));
-            alert('✅ Сохранено!');
-        }
+    // проверка: курсор в конце содержимого ячейки
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const tdText = active.textContent;
+    // позиция курсора — в конце?
+    const caretAtEnd = (() => {
+      if (!range.collapsed) return false;
+      const preRange = range.cloneRange();
+      preRange.selectNodeContents(active);
+      preRange.setEnd(range.endContainer, range.endOffset);
+      return preRange.toString().length === tdText.length;
+    })();
+    if (!caretAtEnd) return;
 
-        function clearAll() {
-            if (confirm('Удалить ВСЕ строки?')) {
-                rows = [];
-                render();
-                saveData();
-            }
-        }
+    e.preventDefault();
 
-        function exportCSV() {
-            if (rows.length === 0) {
-                alert('Нет данных для выгрузки');
-                return;
-            }
-            let csv = 'Дата,Название,СПО (ФИО,курс,специальность),ВУЗ (ФИО,курс,направление)\n';
-            rows.forEach(r => csv += `"${r.date}","${r.name}","${r.spo}","${r.vuz}"\n`);
-            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'students.csv';
-            a.click();
-        }
+    const currentRow = active.closest('tr');
+    const newRow = createRow();
+    // вставляем после текущей
+    if (currentRow.nextSibling) {
+      tbody.insertBefore(newRow, currentRow.nextSibling);
+    } else {
+      tbody.appendChild(newRow);
+    }
+    // фокус в первую редактируемую ячейку новой строки
+    const firstEditable = [...newRow.children].find(td => td.getAttribute('contenteditable') === 'true');
+    if (firstEditable) {
+      firstEditable.focus();
+      // ставим курсор в конец
+      const r = document.createRange();
+      r.selectNodeContents(firstEditable);
+      r.collapse(false);
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    }
+    updateEditability();
+  });
 
-        render();
-    </script>
+  // ---- Переключение режимов ----
+  btnOrg.addEventListener('click', () => {
+    mode = 'organizer';
+    btnOrg.classList.add('active');
+    btnVol.classList.remove('active');
+    updateEditability();
+  });
+
+  btnVol.addEventListener('click', () => {
+    mode = 'volunteer';
+    btnVol.classList.add('active');
+    btnOrg.classList.remove('active');
+    updateEditability();
+  });
+
+  // ---- Выделение строк и столбцов ----
+  let headerClickLock = false;
+
+  // клик по заголовку — выделение столбца
+  table.querySelectorAll('th').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', (e) => {
+      if (headerClickLock) return;
+      const col = parseInt(th.dataset.col, 10);
+      clearSelection();
+      // заголовок
+      th.classList.add('selected');
+      // все ячейки этого столбца
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const cell = tr.children[col];
+        if (cell) cell.classList.add('selected');
+      });
+    });
+  });
+
+  // клик по ячейке — выделение строки (с Shift — диапазон)
+  tbody.addEventListener('click', (e) => {
+    const td = e.target.closest('td');
+    if (!td) return;
+    // Если пользователь редактирует — не мешаем выделению текста
+    if (window.getSelection().toString().length > 0) return;
+
+    const tr = td.closest('tr');
+    const shift = e.shiftKey;
+
+    if (shift && lastSelectedRow) {
+      // диапазон строк
+      const rows = [...tbody.querySelectorAll('tr')];
+      const start = rows.indexOf(lastSelectedRow);
+      const end = rows.indexOf(tr);
+      clearSelection();
+      const [a, b] = start < end ? [start, end] : [end, start];
+      for (let i = a; i <= b; i++) {
+
+        rows[i].querySelectorAll('td').forEach(c => c.classList.add('selected'));
+      }
+    } else {
+      clearSelection();
+      tr.querySelectorAll('td').forEach(c => c.classList.add('selected'));
+      lastSelectedRow = tr;
+    }
+  });
+
+  let lastSelectedRow = null;
+
+  function clearSelection() {
+    document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
+    lastSelectedRow = null;
+  }
+
+  // Клик вне таблицы снимает выделение
+  document.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('table')) clearSelection();
+  });
+
+  // ---- Сохранение ----
+  document.getElementById('btnSave').addEventListener('click', () => {
+    const data = [];
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const row = [];
+      tr.querySelectorAll('td').forEach(td => row.push(td.textContent.trim()));
+      // пропускаем полностью пустые строки
+      if (row.some(v => v !== '')) data.push(row);
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    alert('Данные сохранены.');
+  });
+
+  // ---- Экспорт в CSV (Excel) ----
+  document.getElementById('btnCsv').addEventListener('click', () => {
+    const rows = [];
+    // заголовки
+    const headers = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    rows.push(headers);
+    // данные
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const row = [];
+      tr.querySelectorAll('td').forEach(td => row.push(td.textContent.trim()));
+      if (row.some(v => v !== '')) rows.push(row);
+    });
+
+    const csvEscape = (val) => {
+      const s = String(val == null ? '' : val);
+      if (/[;"\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    };
+
+    // Точка с запятой как разделитель — Excel в RU-локали откроет корректно
+    const csv = '\uFEFF' + rows.map(r => r.map(csvEscape).join(';')).join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'мероприятие.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ---- Старт ----
+  initTable();
+})();
+</script>
+
 </body>
 </html>
+
